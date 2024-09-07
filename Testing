@@ -1,0 +1,79 @@
+import cv2
+from cvzone.HandTrackingModule import HandDetector
+from cvzone.ClassificationModule import Classifier
+import numpy as np
+import pyttsx3
+import tensorflow
+
+engine = pyttsx3.init()
+engine.setProperty('rate', 150)    
+engine.setProperty('volume', 1.0)
+
+detector = HandDetector(detectionCon=0.8,maxHands=2)
+cap = cv2.VideoCapture(1) 
+
+
+classifier = Classifier("newmodel1/keras_model.h5", "newmodel1/labels.txt")
+
+margin = 20
+img_size = 300
+alpha = 0.5
+prev_bbox = None
+
+labels = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "0", "P", "Q", "R", "S", "T", "U", "V", "X", "Y", "Z"]
+
+while True:
+    success, img = cap.read()
+    if not success:
+        print("Failed to read from camera")
+        break
+
+    img_output = img.copy()
+
+    hands, img = detector.findHands(img)
+
+    if hands:
+        x1, y1, x2, y2 = float('inf'), float('inf'), 0, 0
+        for hand in hands:
+            x, y, w, h = hand['bbox']
+            x1 = min(x1, x)
+            y1 = min(y1, y)
+            x2 = max(x2, x + w)
+            y2 = max(y2, y + h)
+        if prev_bbox is not None:
+            x1 = prev_bbox[0] * alpha + x1 * (1 - alpha)
+            y1 = prev_bbox[1] * alpha + y1 * (1 - alpha)
+            x2 = prev_bbox[2] * alpha + x2 * (1 - alpha)
+            y2 = prev_bbox[3] * alpha + y2 * (1 - alpha)
+
+        prev_bbox = (x1, y1, x2, y2)
+
+        x1 = max(0, int(x1 - margin))
+        y1 = max(0, int(y1 - margin))
+        x2 = min(img.shape[1], int(x2 + margin))
+        y2 = min(img.shape[0], int(y2 + margin))
+
+        # Crop, resize, and preprocess the hand region
+        img_crop = img[y1:y2, x1:x2]
+        img_white = np.ones((img_size, img_size, 3), np.uint8) * 255
+        img_resize = cv2.resize(img_crop, (img_size, img_size))
+
+        img_white[0:img_size, 0:img_size] = img_resize
+
+        prediction, index = classifier.getPrediction(img_white, draw=False)
+
+
+        cv2.rectangle(img_output, (x - margin, y - margin - 50), (x - margin + 90, y - margin - 50 + 50), (255, 0, 255), cv2.FILLED)
+        cv2.putText(img_output, labels[index], (x, y - 28), cv2.FONT_HERSHEY_COMPLEX, 1.7, (255, 255, 255), 2)
+        cv2.rectangle(img_output, (x - margin, y - margin), (x + w + margin, y + h + margin), (255, 0, 255), 4)
+
+        engine.say(labels[index])
+        engine.runAndWait()
+
+    cv2.imshow("Hand Gesture Recognition", img_output)
+
+    if cv2.waitKey(1) & 0xFF == ord('q'):
+        break
+
+cap.release()
+cv2.destroyAllWindows()
