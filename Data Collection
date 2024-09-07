@@ -1,0 +1,61 @@
+import cv2
+from cvzone.HandTrackingModule import HandDetector
+import numpy as np
+import math
+import time
+
+cap = cv2.VideoCapture(0)  # Use correct index for your camera
+detector = HandDetector(maxHands=2)
+
+margin = 20
+imgsize = 300
+folder = "Data/' '"
+counter = 0
+
+while True:
+    success, img = cap.read()
+    if not success or img is None:
+        print("Failed to grab frame or frame is empty.")
+        continue
+
+    hands, img = detector.findHands(img)
+    if hands:
+        hand = hands[0]
+        x, y, w, h = hand['bbox']
+
+        imgwhite = np.ones((imgsize, imgsize, 3), np.uint8) * 255
+        imgcrop = img[y-margin:y+h+margin, x-margin:x+w+margin]
+
+        if imgcrop.size == 0:
+            print("Invalid crop dimensions, skipping frame.")
+            continue
+
+        imgcropshape = imgcrop.shape
+        aspectratio = h / w
+
+        if aspectratio > 1:
+            k = imgsize / h
+            wcal = math.ceil(k * w)
+            imgresize = cv2.resize(imgcrop, (wcal, imgsize))
+            wgap = math.ceil((imgsize - wcal) / 2)
+            imgwhite[:, wgap:wcal+wgap] = imgresize
+        else:
+            k = imgsize / w
+            hcal = math.ceil(k * h)
+            imgresize = cv2.resize(imgcrop, (imgsize, hcal))
+            hgap = math.ceil((imgsize - hcal) / 2)
+            imgwhite[hgap:hcal+hgap, :] = imgresize
+
+        cv2.imshow("imagecrop", imgcrop)
+        cv2.imshow("imagewhite", imgwhite)
+
+    cv2.imshow("image", img)
+    key = cv2.waitKey(1)
+
+    if key == ord("s"):
+        counter += 1
+        cv2.imwrite(f'{folder}/Image_{time.time()}.jpg', imgwhite)
+        print(counter)
+
+cap.release()
+cv2.destroyAllWindows()
